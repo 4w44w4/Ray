@@ -826,24 +826,38 @@
       }
     };
 
-    // ── Load real artwork from iTunes API ──
-    async function loadArtwork(trackId, itunesId) {
-      try {
-        const res = await fetch(`https://itunes.apple.com/lookup?id=${itunesId}&entity=song`);
-        const data = await res.json();
-        if (data.results && data.results.length > 0) {
-          const artUrl = data.results[0].artworkUrl100.replace('100x100', '300x300');
-          const imgEl  = document.getElementById('art-' + trackId);
-          const phEl   = document.getElementById('ph-' + trackId);
-          if (imgEl) {
-            imgEl.src = artUrl;
-            imgEl.style.display = 'block';
-            if (phEl) phEl.style.display = 'none';
-            // Also store for modal
-            tracks[trackId].artUrl = artUrl;
+    // ── Load real artwork from Spotify oEmbed (with iTunes fallback) ──
+    async function loadArtwork(trackId, itunesId, spotifyUrl) {
+      const imgEl = document.getElementById('art-' + trackId);
+      const phEl  = document.getElementById('ph-' + trackId);
+      let artUrl = null;
+
+      // Try Spotify oEmbed first
+      if (spotifyUrl) {
+        try {
+          const res  = await fetch(`https://open.spotify.com/oembed?url=${encodeURIComponent(spotifyUrl)}`);
+          const data = await res.json();
+          if (data.thumbnail_url) artUrl = data.thumbnail_url;
+        } catch(e) { /* fall through to iTunes */ }
+      }
+
+      // Fallback: iTunes lookup
+      if (!artUrl && itunesId) {
+        try {
+          const res  = await fetch(`https://itunes.apple.com/lookup?id=${itunesId}&entity=song`);
+          const data = await res.json();
+          if (data.results && data.results.length > 0) {
+            artUrl = data.results[0].artworkUrl100.replace('100x100', '300x300');
           }
-        }
-      } catch(e) { /* fallback to placeholder */ }
+        } catch(e) { /* fallback to placeholder */ }
+      }
+
+      if (artUrl && imgEl) {
+        imgEl.src = artUrl;
+        imgEl.style.display = 'block';
+        if (phEl) phEl.style.display = 'none';
+        tracks[trackId].artUrl = artUrl;
+      }
     }
 
     // ── Load real YouTube video titles via noembed ──
@@ -864,7 +878,7 @@
     // Init all artwork + video titles on load
     window.addEventListener('DOMContentLoaded', () => {
       Object.entries(tracks).forEach(([id, t]) => {
-        if (t.itunesId) loadArtwork(id, t.itunesId);
+        if (t.itunesId || t.spotify) loadArtwork(id, t.itunesId, t.spotify);
       });
       ['fZaau_Iwlps','8uLkgihPKi0','R9jpe-s42SI'].forEach(loadVideoTitle);
     });
